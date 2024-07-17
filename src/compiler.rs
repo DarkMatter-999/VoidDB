@@ -32,13 +32,15 @@ pub struct Row {
 
 impl Row {
     fn new(id: u32, username: &str, email: &str) -> Self {
+        let usernamelen = if username.len() > COLUMN_USERNAME_SIZE { COLUMN_USERNAME_SIZE } else { username.len() };
         let mut username_array = [0u8; COLUMN_USERNAME_SIZE];
-        for (i, byte) in username.as_bytes().iter().enumerate() {
+        for (i, byte) in username[0..usernamelen].as_bytes().iter().enumerate() {
             username_array[i] = *byte;
         }
 
+        let emaillen = if email.len() > COLUMN_EMAIL_SIZE { COLUMN_EMAIL_SIZE } else { email.len() };
         let mut email_array = [0u8; COLUMN_EMAIL_SIZE];
-        for (i, byte) in email.as_bytes().iter().enumerate() {
+        for (i, byte) in email[0..emaillen].as_bytes().iter().enumerate() {
             email_array[i] = *byte;
         }
 
@@ -176,7 +178,7 @@ fn execute_insert(statement: &Statement, table: &mut Table) -> ExecuteResult {
     }
 }
 
-fn execute_select(statement: &Statement, table: &mut Table) -> ExecuteResult {
+fn execute_select(_statement: &Statement, table: &mut Table) -> ExecuteResult {
     for i in 0..table.num_rows {
         let slot = table.row_slot(i);
         let row = Row::deserialize(slot);
@@ -192,4 +194,39 @@ pub fn execute_statement(statement: &Statement, table: &mut Table) -> ExecuteRes
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[test]
+    fn test_prepare_select() {
+        let mut input_buffer = InputBuffer::new();
+        input_buffer.buffer = "select".to_string();
+        
+        let exec_status = prepare_statement(&input_buffer);
+
+        assert!(matches!(exec_status, Ok(Statement { typ: StatementType::Select, row_to_insert: None })));
+    }
+
+    #[test]
+    fn test_prepare_insert() {
+        let mut input_buffer = InputBuffer::new();
+        input_buffer.buffer = "insert 1 username email@email.com".to_string();
+        
+        let exec_status = prepare_statement(&input_buffer);
+
+        assert!(matches!(exec_status, Ok(Statement { typ: StatementType::Insert, row_to_insert: Some(_) })));
+    }
+
+
+    #[test]
+    fn test_insert() {
+        let mut table = Table::new();
+        let row = Row::new(1, "username", "email@email.com");
+ 
+        let statement = Statement { typ: StatementType::Insert , row_to_insert: Some(row)};
+        let exec_status = execute_statement(&statement, &mut table);
+
+        assert!(matches!(exec_status, ExecuteResult::Success));
+    } 
+}
